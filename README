@@ -1,0 +1,15 @@
+All test runs unless otherwise noted were on an otherwise idle Equinix Metal c3.small.x86 (Intel Xeon E-2278G with 32GiB RAM, Ubuntu 20.04).
+
+The smallpt.cpp was modified to compile with clang via the addition of a static cast.
+
+C baseline benchmarked as as:
+  g++ -O3 smallpt.cpp -o smallpt
+  for i in {1..10}; do \time -a -o perflog.csv -q -f "%e" ./smallpt; done
+
+and:
+  clang -O3 -lm -lstdc++ smallpt.cpp -o smallpt
+  for i in {1..10}; do \time -a -o perflog.csv -q -f "%e" ./smallpt; done
+
+Haskell code is benchmarked as:
+
+SMALLPT=`find dist-newstyle -name smallpt-opt -type f`; for i in {1..10}; do \time -a -o perflog.csv -q -f "%e" $SMALLPT; done
