@@ -28,12 +28,12 @@ dot (Vec a b c) (Vec x y z) = a*x+b*y+c*z
 maxv :: Vec -> Double
 maxv (Vec a b c) = maximum [a,b,c]
 
-data Ray = Ray Vec Vec -- origin, direction
+data Ray = Ray {-# UNPACK #-} !Vec {-# UNPACK #-} !Vec -- origin, direction
 
 data Refl = DIFF | SPEC | REFR -- material types, used in radiance
 
 -- radius, position, emission, color, reflection
-data Sphere = Sphere Double Vec Vec Vec !Refl
+data Sphere = Sphere {-# UNPACK #-} !Double {-# UNPACK #-} !Vec {-# UNPACK #-} !Vec {-# UNPACK #-} !Vec !Refl
 
 intersect :: Ray -> Sphere -> Maybe Double
 intersect (Ray o d) (Sphere r p _e _c _refl) =
