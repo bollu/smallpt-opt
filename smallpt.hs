@@ -8,7 +8,7 @@ import Foreign
 import Foreign.C.Types
 import System.IO (withFile, IOMode(..))
 -- position, also color (r,g,b)
-data Vec = Vec {-# UNPACK #-} !CDouble {-# UNPACK #-} !CDouble {-# UNPACK #-} !CDouble
+data Vec = Vec {-# UNPACK #-} !Double {-# UNPACK #-} !Double {-# UNPACK #-} !Double
 
 zerov :: Vec
 zerov = Vec 0 0 0
@@ -17,15 +17,15 @@ addv (Vec a b c) (Vec x y z) = Vec (a+x) (b+y) (c+z)
 subv (Vec a b c) (Vec x y z) = Vec (a-x) (b-y) (c-z)
 mulv (Vec a b c) (Vec x y z) = Vec (a*x) (b*y) (c*z)
 cross (Vec a b c) (Vec x y z) = Vec (b*z-c*y) (c*x-a*z) (a*y-b*x)
-mulvs :: Vec -> CDouble -> Vec
+mulvs :: Vec -> Double -> Vec
 mulvs (Vec a b c) x = Vec (a*x) (b*x) (c*x)
-len :: Vec -> CDouble
+len :: Vec -> Double
 len (Vec a b c) = sqrt $ a*a+b*b+c*c
 norm :: Vec -> Vec
 norm v = v `mulvs` (1/len v)
-dot :: Vec -> Vec -> CDouble
+dot :: Vec -> Vec -> Double
 dot (Vec a b c) (Vec x y z) = a*x+b*y+c*z
-maxv :: Vec -> CDouble
+maxv :: Vec -> Double
 maxv (Vec a b c) = maximum [a,b,c]
 
 data Ray = Ray Vec Vec -- origin, direction
@@ -33,9 +33,9 @@ data Ray = Ray Vec Vec -- origin, direction
 data Refl = DIFF | SPEC | REFR -- material types, used in radiance
 
 -- radius, position, emission, color, reflection
-data Sphere = Sphere CDouble Vec Vec Vec Refl
+data Sphere = Sphere Double Vec Vec Vec !Refl
 
-intersect :: Ray -> Sphere -> Maybe CDouble
+intersect :: Ray -> Sphere -> Maybe Double
 intersect (Ray o d) (Sphere r p _e _c _refl) =
   if det<0 then Nothing else f (b-sdet) (b+sdet)
   where op = p `subv` o
@@ -60,10 +60,10 @@ spheres = let s = Sphere ; z = zerov ; (.*) = mulvs ; v = Vec in
 clamp :: (Ord p, Num p) => p -> p
 clamp x = if x<0 then 0 else if x>1 then 1 else x
 
-toInt :: CDouble -> Int
+toInt :: Double -> Int
 toInt x = floor $ clamp x ** (1/2.2) * 255 + 0.5
 
-intersects :: Ray -> (Maybe CDouble, Sphere)
+intersects :: Ray -> (Maybe Double, Sphere)
 intersects ray = (k, s)
   where (k,s) = foldl' f (Nothing,undefined) spheres
         f (k',sp) s' = case (k',intersect ray s') of
@@ -183,7 +183,7 @@ writeXi xi y = do
   pokeElemOff xi 2 (y' * y' * y')
 
 foreign import ccall unsafe "erand48"
-  erand48 :: Ptr CUShort -> IO CDouble
+  erand48 :: Ptr CUShort -> IO Double
 
 main :: IO ()
 main = smallpt 200 200 256
