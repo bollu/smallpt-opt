@@ -1,5 +1,5 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
-module Main where
+module Main (main) where
 import qualified Data.Vector.Mutable as VM
 import Data.List (foldl')
 import Data.IORef
