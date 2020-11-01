@@ -63,13 +63,33 @@ def generate_perf_data(repo, c):
 # I can't generate a diff.
 if __name__ == "__main__":
     # array of dicts
-    out_commits_data = []
+    seen_commits = {}
+    if os.path.isfile("perfdata.gen.json"):
+        out_commits_data = []
+        with open("perfdata.gen.json", "r") as f:
+            out_commits_data = json.load(f)
+        for c in out_commits_data:
+            seen_commits[c["commit"]] = c
+    print("seen_commits: vvv\n%s\n^^^" % ("\n".join(list(seen_commits.keys()), )))
+    # print(type(in_commits)); print(type(in_commits[0])); print(in_commits[0].keys()); sys.exit(0)
+
 
     repo = git.Repo(".")
     cs_old2new = list(repo.iter_commits("master"))
     cs_old2new.reverse()
 
+    out_commits_data = []
+
     for c in cs_old2new:
+        # use cached data if we've seen the commit
+        print(c)
+        if c.hexsha in seen_commits: 
+            print("  SEEN |%s|" % (c, ))
+            out_commits_data.append(seen_commits[c.hexsha])
+            continue
+
+        print("  HAVE NOT SEEN |%s|" % (c, ))
+        # if not, regenerate data
         print("at commit: |%s|" % c)
         diff = c.diff(create_patch=True)
         diff_str = "" if not diff else diff[0].diff.decode("utf-8")
