@@ -34,6 +34,8 @@ def generate_perf_data(repo, c):
     print("timing executable at path: |%s|" % (exepathabs, ))
     exe = sh.Command(exepathabs)
 
+    imagesha = str(sh.sha256sum("image.ppm"))
+
     ts = []
     rts_data_list = []
     for i in range(NRUNS):
@@ -55,7 +57,12 @@ def generate_perf_data(repo, c):
     stgpath = str(sh.find("dist-newstyle", "-name", "smallpt.dump-stg", "-type", "f")).strip()
     with open(stgpath, "r") as f: stg = f.read()
 
-    return {"times": ts, "rts_data_list" : rts_data_list, "simpl": simpl, "asm": asm, "stg": stg }
+    return {"times": ts, 
+            "rts_data_list" : rts_data_list, 
+            "simpl": simpl, 
+            "asm": asm,
+            "stg": stg,
+            "imagesha": imagesha}
 
 
 # We hardcode paths, sorry
