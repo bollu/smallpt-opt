@@ -13,3 +13,19 @@ and:
 Haskell code is benchmarked as:
 
 SMALLPT=`find dist-newstyle -name smallpt-opt -type f`; for i in {1..10}; do \time -a -o perflog.csv -q -f "%e" $SMALLPT; done
+
+
+### Generating visualizations
+
+##### dependencies
+
+```
+GitPython >= 3.1,
+sh >= 1.14
+```
+
+Run `./gen-visualization.py` with `smallpt-opt` as the current working
+directory.
+
+
+- [inspiration for graphs](https://www.joachim-breitner.de/blog/758-Winter_is_coming_even_more_quickly)
