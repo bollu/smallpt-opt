@@ -23,6 +23,7 @@ def generate_perf_data(repo, c):
     repo.git.checkout(c)
     print("cabal clean...")
     sh.cabal("clean")
+    sh.cabal("configure")
     print("cabal build...")
     sh.cabal("build", "--ghc-options", "-ddump-to-file",  "--ghc-options", "-ddump-simpl", "--ghc-options", "-ddump-stg", "--ghc-options", "-ddump-asm")
     print("saving data ...")
