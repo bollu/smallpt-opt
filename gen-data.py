@@ -44,7 +44,8 @@ def generate_perf_data(repo, c):
         # https://downloads.haskell.org/~ghc/latest/docs/html/users_guide/runtime_control.html#rts-options-to-produce-runtime-statistics
         rts_data = dict(eval(str(exe("+RTS", "-t", "--machine-readable",  _err_to_out=True, _out=None)).strip()))
         print(json.dumps(rts_data, indent=2))
-        t = rts_data["mut_wall_seconds"]
+        t = str(sh.time("-f", "%e", exepath, _err_to_out=True, _out=None)).strip()
+        # t = rts_data["mut_wall_seconds"]
         ts.append(t)
         rts_data_list.append(rts_data)
     print("times: %s" % (ts, ))
