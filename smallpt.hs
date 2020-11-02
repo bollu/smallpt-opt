@@ -1,13 +1,15 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE UnboxedTuples #-}
 module Main (main) where
-import qualified Data.Vector.Mutable as VM
-import Data.List (foldl')
-import Data.IORef
+import Control.Monad
+import Control.Monad.ST
+import Data.Bits
+import Data.STRef.Unboxed
+import Data.Word
+import GHC.Float hiding (clamp)
 import Text.Printf
-import Foreign
-import Foreign.C.Types
 import System.IO (withFile, IOMode(..))
 -- position, also color (r,g,b)
 data Vec = Vec {-# UNPACK #-} !Double {-# UNPACK #-} !Double {-# UNPACK #-} !Double
@@ -42,27 +44,31 @@ pattern REFR = Refl 2
 -- radius, position, emission, color, reflection
 data Sphere = Sphere {-# UNPACK #-} !Double {-# UNPACK #-} !Vec {-# UNPACK #-} !Vec {-# UNPACK #-} !Vec {-# UNPACK #-} !Refl
 
-intersect :: Ray -> Sphere -> Maybe Double
-intersect (Ray o d) (Sphere r p _e _c _refl) =
-  if det<0 then Nothing else f (b-sdet) (b+sdet)
-  where op = p `subv` o
-        eps = 1e-4
-        b = op `dot` d
-        det = b*b - (op `dot` op) + r*r
-        sdet = sqrt det
-        f a s = if a>eps then Just a else if s>eps then Just s else Nothing
+sphLeft, sphRight, sphBack, sphFrnt, sphBotm, sphTop, sphMirr, sphGlas, sphLite :: Sphere
+sphLeft  = Sphere 1e5  (Vec (1e5+1) 40.8 81.6)    zerov (Vec 0.75 0.25 0.25) DIFF --Left
+sphRight = Sphere 1e5  (Vec (-1e5+99) 40.8 81.6)  zerov (Vec 0.25 0.25 0.75) DIFF --Rght
+sphBack  = Sphere 1e5  (Vec 50 40.8 1e5)          zerov (Vec 0.75 0.75 0.75) DIFF --Back
+sphFrnt  = Sphere 1e5  (Vec 50 40.8 (-1e5+170))   zerov zerov              DIFF --Frnt
+sphBotm  = Sphere 1e5  (Vec 50 1e5 81.6)          zerov (Vec 0.75 0.75 0.75) DIFF --Botm
+sphTop   = Sphere 1e5  (Vec 50 (-1e5+81.6) 81.6)  zerov (Vec 0.75 0.75 0.75) DIFF --Top
+sphMirr  = Sphere 16.5 (Vec 27 16.5 47)           zerov (Vec 0.999 0.999 0.999) SPEC --Mirr
+sphGlas  = Sphere 16.5 (Vec 73 16.5 78)           zerov (Vec 0.999 0.999 0.999) REFR --Glas
+sphLite  = Sphere 600  (Vec 50 (681.6-0.27) 81.6) (Vec 12 12 12)       zerov DIFF --Lite
 
-spheres :: [Sphere]
-spheres = let s = Sphere ; z = zerov ; (.*) = mulvs ; v = Vec in
-  [ s 1e5 (v (1e5+1) 40.8 81.6)    z (v 0.75 0.25 0.25) DIFF --Left
-  , s 1e5 (v (-1e5+99) 40.8 81.6)  z (v 0.25 0.25 0.75) DIFF --Rght
-  , s 1e5 (v 50 40.8 1e5)          z (v 0.75 0.75 0.75) DIFF --Back
-  , s 1e5 (v 50 40.8 (-1e5+170))   z z                  DIFF --Frnt
-  , s 1e5 (v 50 1e5 81.6)          z (v 0.75 0.75 0.75) DIFF --Botm
-  , s 1e5 (v 50 (-1e5+81.6) 81.6)  z (v 0.75 0.75 0.75) DIFF --Top
-  , s 16.5(v 27 16.5 47)           z ((v 1 1 1).* 0.999) SPEC --Mirr
-  , s 16.5(v 73 16.5 78)           z ((v 1 1 1).* 0.999) REFR --Glas
-  , s 600 (v 50 (681.6-0.27) 81.6) (v 12 12 12)       z DIFF]--Lite
+intersect :: Ray -> Sphere -> Double
+intersect (Ray o d) (Sphere r p _e _c _refl) =
+  if det<0
+  then (1/0.0)
+  else
+    let !eps = 1e-4
+        !sdet = sqrt det
+        !a = b-sdet
+        !s = b+sdet
+    in if a>eps then a else if s>eps then s else (1/0.0)
+  where
+    !det = b*b - (op `dot` op) + r*r
+    !b = op `dot` d
+    !op = p `subv` o
 
 clamp :: (Ord p, Num p) => p -> p
 clamp x = if x<0 then 0 else if x>1 then 1 else x
@@ -70,22 +76,20 @@ clamp x = if x<0 then 0 else if x>1 then 1 else x
 toInt :: Double -> Int
 toInt x = floor $ clamp x ** (1/2.2) * 255 + 0.5
 
-intersects :: Ray -> (Maybe Double, Sphere)
-intersects ray = (k, s)
-  where (k,s) = foldl' f (Nothing,undefined) spheres
-        f (k',sp) s' = case (k',intersect ray s') of
-                  (Nothing,Just x) -> (Just x,s')
-                  (Just y,Just x) | x < y -> (Just x,s')
-                  _ -> (k',sp)
+intersects :: Ray -> (Double, Sphere)
+intersects ray =
+    f (f (f (f (f (f (f (f (intersect ray sphLeft, sphLeft) sphRight) sphBack) sphFrnt) sphBotm) sphTop) sphMirr) sphGlas) sphLite
+  where
+    f !(!k', !sp) !s' = let !x = intersect ray s' in if x < k' then (x, s') else (k', sp)
 
-radiance :: Ray -> CInt -> Ptr CUShort -> IO Vec
+radiance :: Ray -> Int -> STRefU s Word64 -> ST s Vec
 radiance ray@(Ray o d) depth xi = case intersects ray of
-  (Nothing,_) -> return zerov
-  (Just t,Sphere _r p e c refl) -> do
-    let x = o `addv` (d `mulvs` t)
-        n = norm $ x `subv` p
-        nl = if n `dot` d < 0 then n else n `mulvs` (-1)
-        depth' = depth + 1
+  (!t,_) | t == (1/0.0) -> return zerov
+  (!t,!Sphere _r p e c refl) -> do
+    let !x = o `addv` (d `mulvs` t)
+        !n = norm $ x `subv` p
+        !nl = if n `dot` d < 0 then n else n `mulvs` (-1)
+        !depth' = depth + 1
         continue f = case refl of
           DIFF -> do
             r1 <- ((2*pi)*) `fmap` erand48 xi
@@ -95,7 +99,7 @@ radiance ray@(Ray o d) depth xi = case intersects ray of
                 u = norm $ (if abs wx > 0.1 then (Vec 0 1 0) else (Vec 1 0 0)) `cross` w
                 v = w `cross` u
                 d' = norm $ (u`mulvs`(cos r1*r2s)) `addv` (v`mulvs`(sin r1*r2s)) `addv` (w`mulvs`sqrt (1-r2))
-            rad <- radiance (Ray x d') depth' xi
+            !rad <- radiance (Ray x d') depth' xi
             return $ e `addv` (f `mulv` rad)
 
           SPEC -> do
@@ -104,36 +108,32 @@ radiance ray@(Ray o d) depth xi = case intersects ray of
             return $ e `addv` (f `mulv` rad)
 
           REFR -> do
-            let reflRay = Ray x (d `subv` (n `mulvs` (2* n`dot`d))) -- Ideal dielectric REFRACTION
-                into = n`dot`nl > 0                -- Ray from outside going in?
-                nc = 1
-                nt = 1.5
-                nnt = if into then nc/nt else nt/nc
-                ddn= d`dot`nl
-                cos2t = 1-nnt*nnt*(1-ddn*ddn)
+            let !cos2t = 1-nnt*nnt*(1-ddn*ddn)
+                !nnt = if into then (1/1.5) else 1.5
+                !ddn= d`dot`nl
+                !into = n`dot`nl > 0                -- Ray from outside going in?
+                reflRay = Ray x (d `subv` (n `mulvs` (2* n`dot`d))) -- Ideal dielectric REFRACTION
             if cos2t<0    -- Total internal reflection
               then do
-                rad <- radiance reflRay depth' xi
+                !rad <- radiance reflRay depth' xi
                 return $ e `addv` (f `mulv` rad)
               else do
                 let tdir = norm $ (d`mulvs`nnt `subv` (n`mulvs`((if into then 1 else -1)*(ddn*nnt+sqrt cos2t))))
-                    a=nt-nc
-                    b=nt+nc
-                    r0=a*a/(b*b)
-                    c' = 1-(if into then -ddn else tdir`dot`n)
-                    re=r0+(1-r0)*c'*c'*c'*c'*c'
-                    tr=1-re
-                    pp=0.25+0.5*re
-                    rp=re/pp
-                    tp=tr/(1-pp)
+                    !r0=4.0e-2
+                    !c' = 1-(if into then -ddn else tdir`dot`n)
+                    !re=r0+(1-r0)*c'*c'*c'*c'*c'
+                    !tr=1-re
+                    !pp=0.25+0.5*re
+                    !rp=re/pp
+                    !tp=tr/(1-pp)
                 rad <-
                   if depth>2
                     then do er <- erand48 xi
                             if er<pp -- Russian roulette
                               then (`mulvs` rp) `fmap` radiance reflRay depth' xi
                               else (`mulvs` tp) `fmap` radiance (Ray x tdir) depth' xi
-                    else do rad0 <- (`mulvs` re) `fmap` radiance reflRay depth' xi
-                            rad1 <- (`mulvs` tr) `fmap` radiance(Ray x tdir) depth' xi
+                    else do !rad0 <- (`mulvs` re) `fmap` radiance reflRay depth' xi
+                            !rad1 <- (`mulvs` tr) `fmap` radiance(Ray x tdir) depth' xi
                             return $ rad0 `addv` rad1
                 return $ e `addv` (f `mulv` rad)
 
@@ -152,45 +152,40 @@ smallpt w h nsamps = do
       dir = norm $ Vec 0 (-0.042612) (-1)
       cx = Vec (fromIntegral w * 0.5135 / fromIntegral h) 0 0
       cy = norm (cx `cross` dir) `mulvs` 0.5135
-  c <- VM.replicate (w * h) zerov
-  allocaArray 3 $ \xi ->
-      flip mapM_ [0..h-1] $ \y -> do
-        --hPrintf stderr "\rRendering (%d spp) %5.2f%%" (samps*4::Int) (100.0*fromIntegral y/(fromIntegral h-1)::Double)
-      writeXi xi y
-      flip mapM_ [0..w-1] $ \x -> do
-        let i = (h-y-1) * w + x
-        flip mapM_ [0..1] $ \sy -> do
-          flip mapM_ [0..1] $ \sx -> do
-            r <- newIORef zerov
-            flip mapM_ [0..samps-1] $ \_s -> do
+      img = (`concatMap` [(h-1),(h-2)..0]) $ \y -> runST $ do
+        xi <- newSTRefU (mkErand48Seed' y)
+        forM [0..w-1] $ \x -> do
+          (\pf -> foldM pf zerov [(sy, sx) | sy <- [0,1], sx <- [0,1]]) $ \ci (sy, sx) -> do
+            Vec rr rg rb <- (\f -> foldM f zerov [0..samps-1]) $ \ !r _s -> do
               r1 <- (2*) `fmap` erand48 xi
-              let dx = if r1<1 then sqrt r1-1 else 1-sqrt(2-r1)
+              let !dx = if r1<1 then sqrt r1-1 else 1-sqrt(2-r1)
               r2 <- (2*) `fmap` erand48 xi
-              let dy = if r2<1 then sqrt r2-1 else 1-sqrt(2-r2)
-                  d = (cx `mulvs` (((sx + 0.5 + dx)/2 + fromIntegral x)/fromIntegral w - 0.5)) `addv`
-                      (cy `mulvs` (((sy + 0.5 + dy)/2 + fromIntegral y)/fromIntegral h - 0.5)) `addv` dir
+              let !dy = if r2<1 then sqrt r2-1 else 1-sqrt(2-r2)
+                  !d = (cx `mulvs` (((sx + 0.5 + dx)/2 + fromIntegral x)/fromIntegral w - 0.5)) `addv`
+                       (cy `mulvs` (((sy + 0.5 + dy)/2 + fromIntegral y)/fromIntegral h - 0.5)) `addv` dir
               rad <- radiance (Ray (org`addv`(d`mulvs`140)) (norm d)) 0 xi
               -- Camera rays are pushed forward ^^^^^ to start in interior
-              modifyIORef r (`addv` (rad `mulvs` (1 / fromIntegral samps)))
-            ci <- VM.unsafeRead c i
-            Vec rr rg rb <- readIORef r
-            VM.unsafeWrite c i $ ci `addv` (Vec (clamp rr) (clamp rg) (clamp rb) `mulvs` 0.25)
+              pure $ (r `addv` (rad `mulvs` (1 / fromIntegral samps)))
+            pure $ ci `addv` (Vec (clamp rr) (clamp rg) (clamp rb) `mulvs` 0.25)
 
   withFile "image.ppm" WriteMode $ \hdl -> do
         hPrintf hdl "P3\n%d %d\n%d\n" w h (255::Int)
-        flip mapM_ [0..w*h-1] $ \i -> do
-          Vec r g b <- VM.unsafeRead c i
+        forM_ img $ \(Vec r g b) -> do
           hPrintf hdl "%d %d %d " (toInt r) (toInt g) (toInt b)
 
-writeXi :: Ptr CUShort -> Int -> IO ()
-writeXi xi y = do
-  let y' = fromIntegral y
-  pokeElemOff xi 0 0
-  pokeElemOff xi 1 0
-  pokeElemOff xi 2 (y' * y' * y')
+mkErand48Seed' :: Int -> Word64
+mkErand48Seed' y =
+  let yw = fromIntegral y; prod = (yw * yw * yw)
+  in (prod `unsafeShiftL` 32)
 
-foreign import ccall unsafe "erand48"
-  erand48 :: Ptr CUShort -> IO Double
+erand48 :: STRefU s Word64 -> ST s Double
+erand48 !t =  do
+  r <- readSTRefU t
+  let x' = (0x5deece66d * r) + 0xb
+      d_word = (0x3ff0000000000000) .|. ((x' .&. 0xffffffffffff) `unsafeShiftL` 4)
+      d = (castWord64ToDouble d_word) - 1.0
+  writeSTRefU t x'
+  pure d
 
 main :: IO ()
 main = smallpt 200 200 256
