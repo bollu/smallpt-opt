@@ -34,7 +34,8 @@ def generate_perf_data(repo, c):
     print("timing executable at path: |%s|" % (exepathabs, ))
     exe = sh.Command(exepathabs)
 
-    imagesha = str(sh.sha256sum("image.ppm"))
+    imagesha = 42
+    if os.path.isfile("image.ppm"): imagesha = str(sh.sha256sum("image.ppm"))
 
     ts = []
     rts_data_list = []
