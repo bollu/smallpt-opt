@@ -14,7 +14,7 @@ import json
 TIMEPATH="/usr/bin/time"
 
 # number of runs to collect statistics over
-NRUNS = 2
+NRUNS = 1
 
 
 # generate performance data.
@@ -25,6 +25,20 @@ def generate_perf_data(repo, c):
     sh.cabal("clean")
     print("cabal build...")
     sh.cabal("build", "--ghc-options", "-ddump-to-file",  "--ghc-options", "-ddump-simpl", "--ghc-options", "-ddump-stg", "--ghc-options", "-ddump-asm")
+    print("saving data ...")
+    simplpath = str(sh.find("dist-newstyle", "-name", "smallpt.dump-simpl", "-type", "f")).strip()
+    with open(simplpath, "r") as f: simpl = f.read()
+
+    asmpath = str(sh.find("dist-newstyle", "-name", "smallpt.dump-asm", "-type", "f")).strip()
+    with open(asmpath, "r") as f: asm = f.read()
+
+    stgpath = str(sh.find("dist-newstyle", "-name", "smallpt.dump-stg", "-type", "f")).strip()
+    with open(stgpath, "r") as f: stg = f.read()
+    print("cabal clean...")
+    sh.cabal("clean")
+    sh.cabal("configure")
+    print("cabal build...")
+    sh.cabal("build")
     print("looking up executable...")
     cwd = os.getcwd()
     # NOTE: we need the .strip() to eliminate trailing newlines
@@ -45,19 +59,10 @@ def generate_perf_data(repo, c):
         rts_data = dict(eval(str(exe("+RTS", "-t", "--machine-readable",  _err_to_out=True, _out=None)).strip()))
         print(json.dumps(rts_data, indent=2))
         t = str(sh.time("-f", "%e", exepath, _err_to_out=True, _out=None)).strip()
-        # t = rts_data["mut_wall_seconds"]
         ts.append(t)
         rts_data_list.append(rts_data)
     print("times: %s" % (ts, ))
 
-    simplpath = str(sh.find("dist-newstyle", "-name", "smallpt.dump-simpl", "-type", "f")).strip()
-    with open(simplpath, "r") as f: simpl = f.read()
-
-    asmpath = str(sh.find("dist-newstyle", "-name", "smallpt.dump-asm", "-type", "f")).strip()
-    with open(asmpath, "r") as f: asm = f.read()
-
-    stgpath = str(sh.find("dist-newstyle", "-name", "smallpt.dump-stg", "-type", "f")).strip()
-    with open(stgpath, "r") as f: stg = f.read()
 
     return {"times": ts, 
             "rts_data_list" : rts_data_list, 
