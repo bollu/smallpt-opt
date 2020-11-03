@@ -155,25 +155,25 @@ radiance ray@(Ray o d) depth = case intersects ray of
 
 smallpt :: Int -> Int -> Int -> IO ()
 smallpt w h nsamps = do
-  let !samps = nsamps `div` 4
-      !org = Vec 50 52 295.6
-      !dir = norm $ Vec 0 (-0.042612) (-1)
-      !cx = Vec (fromIntegral w * 0.5135 / fromIntegral h) 0 0
-      !cy = norm (cx `cross` dir) .* 0.5135
-      !img = (`concatMap` [(h-1),(h-2)..0]) $ \y -> runWithErand48 y do
+  let samps = nsamps `div` 4
+      org = Vec 50 52 295.6
+      dir = norm $ Vec 0 (-0.042612) (-1)
+      cx = Vec (fromIntegral w * 0.5135 / fromIntegral h) 0 0
+      cy = norm (cx `cross` dir) .* 0.5135
+      img = (`concatMap` [(h-1),(h-2)..0]) $ \y -> runWithErand48 y do
         for [0..w-1] \x -> do
           (\pf -> foldlM pf 0 [(sy, sx) | sy <- [0,1], sx <- [0,1]]) \ci (sy, sx) -> do
-            !(Vec rr rg rb) <- (\f -> foldlM f 0 [0..samps-1]) \ !r _s -> do
-              !r1 <- (2*) <$> erand48
+            Vec rr rg rb <- (\f -> foldlM f 0 [0..samps-1]) \ !r _s -> do
+              r1 <- (2*) <$> erand48
               let !dx = if r1<1 then sqrt r1-1 else 1-sqrt(2-r1)
-              !r2 <- (2*) <$> erand48
+              r2 <- (2*) <$> erand48
               let !dy = if r2<1 then sqrt r2-1 else 1-sqrt(2-r2)
                   !d = (cx .* (((sx + 0.5 + dx)/2 + fromIntegral x)/fromIntegral w - 0.5)) +
                        (cy .* (((sy + 0.5 + dy)/2 + fromIntegral y)/fromIntegral h - 0.5)) + dir
-              !rad <- radiance (Ray (org+d.*140) (norm d)) 0
+              rad <- radiance (Ray (org+d.*140) (norm d)) 0
               -- Camera rays are pushed forward ^^^^^ to start in interior
-              pure $! r + rad .* recip (fromIntegral samps)
-            pure $! ci + Vec (clamp rr) (clamp rg) (clamp rb) .* 0.25
+              pure (r + rad .* recip (fromIntegral samps))
+            pure (ci + Vec (clamp rr) (clamp rg) (clamp rb) .* 0.25)
 
   withFile "image.ppm" WriteMode $ \hdl -> do
         hPrintf hdl "P3\n%d %d\n%d\n" w h (255::Int)
