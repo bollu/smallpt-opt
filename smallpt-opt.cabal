@@ -21,5 +21,6 @@ executable smallpt-opt
 
   build-depends:
       base >= 4.12 && < 4.15
+    , bytestring ^>= 0.11
 
   ghc-options: -O2 -rtsopts

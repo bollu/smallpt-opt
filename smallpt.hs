@@ -4,11 +4,11 @@
 {-# LANGUAGE PatternSynonyms #-}
 module Main (main) where
 import Data.Bits
+import Data.ByteString.Builder as BB
 import Data.Foldable
 import Data.Traversable
 import Data.Word
 import GHC.Float (castWord64ToDouble)
-import Text.Printf
 import System.IO (withFile, IOMode(..))
 -- position, also color (r,g,b)
 data Vec = Vec {-# UNPACK #-} !Double {-# UNPACK #-} !Double {-# UNPACK #-} !Double
@@ -80,8 +80,8 @@ sphLite  = Sphere 600  (Vec 50 681.33 81.6)    12 0     DIFF --Lite
 clamp :: (Ord p, Num p) => p -> p
 clamp x = if x<0 then 0 else if x>1 then 1 else x
 
-toInt :: Double -> Int
-toInt x = floor $ clamp x ** recip 2.2 * 255 + 0.5
+toInt :: Double -> BB.Builder
+toInt x = BB.intDec (floor (clamp x ** recip 2.2 * 255 + 0.5)) <> BB.char8 ' '
 
 data T = T !Double !Sphere
 
@@ -176,9 +176,11 @@ smallpt w h nsamps = do
             pure (ci + Vec (clamp rr) (clamp rg) (clamp rb) .* 0.25)
 
   withFile "image.ppm" WriteMode $ \hdl -> do
-        hPrintf hdl "P3\n%d %d\n%d\n" w h (255::Int)
-        for_ img \(Vec r g b) -> do
-          hPrintf hdl "%d %d %d " (toInt r) (toInt g) (toInt b)
+        BB.hPutBuilder hdl $
+          BB.string8 "P3\n" <>
+          BB.intDec w <> BB.char8 ' ' <> BB.intDec h <> BB.char8 '\n' <>
+          BB.intDec 255 <> BB.char8 '\n' <>
+          (mconcat $ fmap (\(Vec r g b) -> toInt r <> toInt g <> toInt b) img)
 
 data ET a = ET !Word64 !a deriving Functor
 newtype Erand48 a = Erand48 { runErand48' :: Word64 -> ET a } deriving Functor
