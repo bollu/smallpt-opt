@@ -1,4 +1,4 @@
 packages: .
 
 package smallpt-opt
-  ghc-options: -Wall
+  ghc-options: -Wall -fllvm
