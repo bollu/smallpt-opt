@@ -1,15 +1,15 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE PatternSynonyms #-}
 module Main (main) where
+import Data.Bits
 import Data.Foldable
 import Data.List (foldl')
 import Data.IORef
 import qualified Data.Vector.Mutable as VM
+import Data.Word
+import GHC.Float (castWord64ToDouble)
 import Text.Printf
-import Foreign
-import Foreign.C.Types
 import System.IO (withFile, IOMode(..))
 -- position, also color (r,g,b)
 data Vec = Vec {-# UNPACK #-} !Double {-# UNPACK #-} !Double {-# UNPACK #-} !Double
@@ -88,7 +88,7 @@ intersects ray = (k, s)
                   (Just y,Just x) | x < y -> (Just x,s')
                   _ -> (k',sp)
 
-radiance :: Ray -> Int -> Ptr CUShort -> IO Vec
+radiance :: Ray -> Int -> IORef Word64 -> IO Vec
 radiance ray@(Ray o d) depth xi = case intersects ray of
   (Nothing,_) -> return 0
   (Just t,Sphere _r p e c refl) -> do
@@ -162,8 +162,8 @@ smallpt w h nsamps = do
       cx = Vec (fromIntegral w * 0.5135 / fromIntegral h) 0 0
       cy = norm (cx `cross` dir) .* 0.5135
   c <- VM.replicate (w * h) 0
-  allocaArray 3 \xi ->
-    flip mapM_ [0..h-1] $ \y -> do
+  xi <- newIORef 0
+  flip mapM_ [0..h-1] $ \y -> do
       writeXi xi y
       for_ [0..w-1] \x -> do
         let i = (h-y-1) * w + x
@@ -190,15 +190,18 @@ smallpt w h nsamps = do
           Vec r g b <- VM.unsafeRead c i
           hPrintf hdl "%d %d %d " (toInt r) (toInt g) (toInt b)
 
-writeXi :: Ptr CUShort -> Int -> IO ()
-writeXi xi y = do
-  let y' = fromIntegral y
-  pokeElemOff xi 0 0
-  pokeElemOff xi 1 0
-  pokeElemOff xi 2 (y' * y' * y')
+writeXi :: IORef Word64 -> Int -> IO ()
+writeXi !xi !y = let yw = fromIntegral y; prod = yw * yw * yw in writeIORef xi (prod `unsafeShiftL` 32)
 
-foreign import ccall unsafe "erand48"
-  erand48 :: Ptr CUShort -> IO Double
+erand48 :: IORef Word64 -> IO Double
+erand48 !t =  do
+  r <- readIORef t
+  let x' = 0x5deece66d * r + 0xb
+      d_word = 0x3ff0000000000000 .|. ((x' .&. 0xffffffffffff) `unsafeShiftL` 4)
+      d = castWord64ToDouble d_word - 1.0
+  writeIORef t x'
+  pure d
+      
 
 main :: IO ()
 main = smallpt 200 200 256
