@@ -53,13 +53,18 @@ data Sphere = Sphere {-# UNPACK #-} !Double {-# UNPACK #-} !Vec {-# UNPACK #-} !
 
 intersect :: Ray -> Sphere -> Maybe Double
 intersect (Ray o d) (Sphere r p _e _c _refl) =
-  if det<0 then Nothing else f (b-sdet) (b+sdet)
-  where op = p - o
-        eps = 1e-4
-        b = dot op d
-        det = b*b - dot op op + r*r
-        sdet = sqrt det
-        f a s = if a>eps then Just a else if s>eps then Just s else Nothing
+  if det<0
+  then Nothing
+  else
+    let !eps = 1e-4
+        !sdet = sqrt det
+        !a = b-sdet
+        !s = b+sdet
+    in if a>eps then Just a else if s>eps then Just s else Nothing
+  where
+    !det = b*b - dot op op + r*r
+    !b = dot op d
+    !op = p - o
 
 spheres :: [Sphere]
 spheres =
@@ -89,13 +94,12 @@ intersects ray = (k, s)
 
 radiance :: Ray -> Int -> Erand48 Vec
 radiance ray@(Ray o d) depth = case intersects ray of
-  (Nothing,_) -> return 0
-  (Just t,Sphere _r p e c refl) -> do
-    let x = o + d .* t
-        n = norm $ x - p
-        nl = if dot n d < 0 then n else negate n
-        !pr = maxv c
-        depth' = depth + 1
+  (!Nothing,_) -> return 0
+  (!Just !t,!Sphere _r p e c refl) -> do
+    let !x = o + d .* t
+        !n = norm $ x - p
+        !nl = if dot n d < 0 then n else negate n
+        !depth' = depth + 1
         continue f = case refl of
           DIFF -> do
             r1 <- (2*pi*) <$> erand48
@@ -105,7 +109,7 @@ radiance ray@(Ray o d) depth = case intersects ray of
                 u = norm $ cross (if abs wx > 0.1 then (Vec 0 1 0) else (Vec 1 0 0)) w
                 v = w `cross` u
                 d' = norm $ u .* (r2s*cos r1) + v .* (sin r1*r2s) + w .* sqrt (1-r2)
-            rad <- radiance (Ray x d') depth'
+            !rad <- radiance (Ray x d') depth'
             return (e + f * rad)
 
           SPEC -> do
@@ -114,42 +118,39 @@ radiance ray@(Ray o d) depth = case intersects ray of
             return (e + f * rad)
 
           REFR -> do
-            let reflRay = Ray x (d - n .* dot (2*n) d) -- Ideal dielectric REFRACTION
-                into = dot n nl > 0                -- Ray from outside going in?
-                nc = 1
-                nt = 1.5
-                nnt = if into then nc/nt else nt/nc
-                ddn= dot d nl
-                cos2t = 1-nnt*nnt*(1-ddn*ddn)
+            let !cos2t = 1-nnt*nnt*(1-ddn*ddn)
+                !into = dot n nl > 0                -- Ray from outside going in?
+                !nnt = if into then recip 1.5 else 1.5
+                !ddn= dot d nl
+                reflRay = Ray x (d - n .* dot (2*n) d) -- Ideal dielectric REFRACTION
             if cos2t<0    -- Total internal reflection
               then do
-                rad <- radiance reflRay depth'
+                !rad <- radiance reflRay depth'
                 return (e + f * rad)
               else do
                 let tdir = norm (d .* nnt - (n.*((if into then 1 else -1)*(ddn*nnt+sqrt cos2t))))
-                    a=nt-nc
-                    b=nt+nc
-                    r0=a*a/(b*b)
-                    c' = 1-if into then -ddn else dot tdir n
-                    re=r0+(1-r0)*c'*c'*c'*c'*c'
-                    tr=1-re
-                    pp=0.25+0.5*re
-                    rp=re/pp
-                    tp=tr/(1-pp)
+                    !r0=4.0e-2
+                    !c' = 1-if into then -ddn else dot tdir n
+                    !re=r0+(1-r0)*c'*c'*c'*c'*c'
+                    !tr=1-re
+                    !pp=0.25+0.5*re
+                    !rp=re/pp
+                    !tp=tr/(1-pp)
                 rad <-
                   if depth>2
                     then do er <- erand48
                             if er<pp -- Russian roulette
                               then (.* rp) <$> radiance reflRay depth'
                               else (.* tp) <$> radiance (Ray x tdir) depth'
-                    else do rad0 <- (.* re) <$> radiance reflRay depth'
-                            rad1 <- (.* tr) <$> radiance (Ray x tdir) depth'
+                    else do !rad0 <- (.* re) <$> radiance reflRay depth'
+                            !rad1 <- (.* tr) <$> radiance (Ray x tdir) depth'
                             return (rad0 + rad1)
                 return (e + f * rad)
 
     if depth'>5
       then do
         er <- erand48
+        let !pr = maxv c
         if er < pr then continue (c .* recip pr) else return e
       else continue c
 
