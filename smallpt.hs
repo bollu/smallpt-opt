@@ -51,16 +51,16 @@ pattern REFR = Refl 2
 -- radius, position, emission, color, reflection
 data Sphere = Sphere {-# UNPACK #-} !Double {-# UNPACK #-} !Vec {-# UNPACK #-} !Vec {-# UNPACK #-} !Vec {-# UNPACK #-} !Refl
 
-intersect :: Ray -> Sphere -> Maybe Double
+intersect :: Ray -> Sphere -> Double
 intersect (Ray o d) (Sphere r p _e _c _refl) =
   if det<0
-  then Nothing
+  then 1/0.0
   else
     let !eps = 1e-4
         !sdet = sqrt det
         !a = b-sdet
         !s = b+sdet
-    in if a>eps then Just a else if s>eps then Just s else Nothing
+    in if a>eps then a else if s>eps then s else 1/0.0
   where
     !det = b*b - dot op op + r*r
     !b = dot op d
@@ -84,18 +84,15 @@ clamp x = if x<0 then 0 else if x>1 then 1 else x
 toInt :: Double -> Int
 toInt x = floor $ clamp x ** recip 2.2 * 255 + 0.5
 
-intersects :: Ray -> (Maybe Double, Sphere)
+intersects :: Ray -> (Double, Sphere)
 intersects ray = (k, s)
-  where (k,s) = foldl' f (Nothing,undefined) spheres
-        f (k',sp) s' = case (k',intersect ray s') of
-                  (Nothing,Just x) -> (Just x,s')
-                  (Just y,Just x) | x < y -> (Just x,s')
-                  _ -> (k',sp)
+  where (k,s) = foldl' f (1/0.0,undefined) spheres
+        f (k', sp) s' = let !x = intersect ray s' in if x < k' then (x, s') else (k', sp)
 
 radiance :: Ray -> Int -> Erand48 Vec
 radiance ray@(Ray o d) depth = case intersects ray of
-  (!Nothing,_) -> return 0
-  (!Just !t,!Sphere _r p e c refl) -> do
+  (!t,_) | t == 1/0.0 -> return 0
+  (!t,!Sphere _r p e c refl) -> do
     let !x = o + d .* t
         !n = norm $ x - p
         !nl = if dot n d < 0 then n else negate n
