@@ -1,6 +1,6 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
-module Main where
+module Main (main) where
 import Data.Foldable
 import Data.List (foldl')
 import Data.IORef
