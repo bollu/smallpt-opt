@@ -66,17 +66,16 @@ intersect (Ray o d) (Sphere r p _e _c _refl) =
     !b = dot op d
     !op = p - o
 
-spheres :: [Sphere]
-spheres =
-  [ Sphere 1e5  (Vec (1e5+1) 40.8 81.6)  0 (Vec 0.75 0.25 0.25) DIFF --Left
-  , Sphere 1e5  (Vec (99-1e5) 40.8 81.6) 0 (Vec 0.25 0.25 0.75) DIFF --Rght
-  , Sphere 1e5  (Vec 50 40.8 1e5)        0 0.75  DIFF --Back
-  , Sphere 1e5  (Vec 50 40.8 (170-1e5))  0 0     DIFF --Frnt
-  , Sphere 1e5  (Vec 50 1e5 81.6)        0 0.75  DIFF --Botm
-  , Sphere 1e5  (Vec 50 (81.6-1e5) 81.6) 0 0.75  DIFF --Top
-  , Sphere 16.5 (Vec 27 16.5 47)         0 0.999 SPEC --Mirr
-  , Sphere 16.5 (Vec 73 16.5 78)         0 0.999 REFR --Glas
-  , Sphere 600  (Vec 50 681.33 81.6)    12 0     DIFF]--Lite
+sphLeft, sphRight, sphBack, sphFrnt, sphBotm, sphTop, sphMirr, sphGlas, sphLite :: Sphere
+sphLeft  = Sphere 1e5  (Vec (1e5+1) 40.8 81.6)  0 (Vec 0.75 0.25 0.25) DIFF --Left
+sphRight = Sphere 1e5  (Vec (99-1e5) 40.8 81.6) 0 (Vec 0.25 0.25 0.75) DIFF --Rght
+sphBack  = Sphere 1e5  (Vec 50 40.8 1e5)        0 0.75  DIFF --Back
+sphFrnt  = Sphere 1e5  (Vec 50 40.8 (170-1e5))  0 0     DIFF --Frnt
+sphBotm  = Sphere 1e5  (Vec 50 1e5 81.6)        0 0.75  DIFF --Botm
+sphTop   = Sphere 1e5  (Vec 50 (81.6-1e5) 81.6) 0 0.75  DIFF --Top
+sphMirr  = Sphere 16.5 (Vec 27 16.5 47)         0 0.999 SPEC --Mirr
+sphGlas  = Sphere 16.5 (Vec 73 16.5 78)         0 0.999 REFR --Glas
+sphLite  = Sphere 600  (Vec 50 681.33 81.6)    12 0     DIFF --Lite
 
 clamp :: (Ord p, Num p) => p -> p
 clamp x = if x<0 then 0 else if x>1 then 1 else x
@@ -85,9 +84,10 @@ toInt :: Double -> Int
 toInt x = floor $ clamp x ** recip 2.2 * 255 + 0.5
 
 intersects :: Ray -> (Double, Sphere)
-intersects ray = (k, s)
-  where (k,s) = foldl' f (1/0.0,undefined) spheres
-        f (k', sp) s' = let !x = intersect ray s' in if x < k' then (x, s') else (k', sp)
+intersects ray =
+    f (f (f (f (f (f (f (f (intersect ray sphLeft, sphLeft) sphRight) sphBack) sphFrnt) sphBotm) sphTop) sphMirr) sphGlas) sphLite
+  where
+    f (k', sp) s' = let !x = intersect ray s' in if x < k' then (x, s') else (k', sp)
 
 radiance :: Ray -> Int -> Erand48 Vec
 radiance ray@(Ray o d) depth = case intersects ray of
