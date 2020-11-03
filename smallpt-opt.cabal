@@ -21,6 +21,5 @@ executable smallpt-opt
 
   build-depends:
       base >= 4.12 && < 4.15
-    , vector ^>= 0.12
 
   ghc-options: -O2 -rtsopts

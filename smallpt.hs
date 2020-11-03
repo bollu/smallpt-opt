@@ -1,12 +1,11 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE PatternSynonyms #-}
 module Main (main) where
 import Data.Bits
 import Data.Foldable
-import Data.List (foldl')
-import Data.IORef
-import qualified Data.Vector.Mutable as VM
+import Data.Traversable
 import Data.Word
 import GHC.Float (castWord64ToDouble)
 import Text.Printf
@@ -88,8 +87,8 @@ intersects ray = (k, s)
                   (Just y,Just x) | x < y -> (Just x,s')
                   _ -> (k',sp)
 
-radiance :: Ray -> Int -> IORef Word64 -> IO Vec
-radiance ray@(Ray o d) depth xi = case intersects ray of
+radiance :: Ray -> Int -> Erand48 Vec
+radiance ray@(Ray o d) depth = case intersects ray of
   (Nothing,_) -> return 0
   (Just t,Sphere _r p e c refl) -> do
     let x = o + d .* t
@@ -99,19 +98,19 @@ radiance ray@(Ray o d) depth xi = case intersects ray of
         depth' = depth + 1
         continue f = case refl of
           DIFF -> do
-            r1 <- (2*pi*) <$> erand48 xi
-            r2 <- erand48 xi
+            r1 <- (2*pi*) <$> erand48
+            r2 <- erand48
             let r2s = sqrt r2
                 w@(Vec wx _ _) = nl
                 u = norm $ cross (if abs wx > 0.1 then (Vec 0 1 0) else (Vec 1 0 0)) w
                 v = w `cross` u
                 d' = norm $ u .* (r2s*cos r1) + v .* (sin r1*r2s) + w .* sqrt (1-r2)
-            rad <- radiance (Ray x d') depth' xi
+            rad <- radiance (Ray x d') depth'
             return (e + f * rad)
 
           SPEC -> do
             let d' = d - n .* (2 * dot n d)
-            rad <- radiance (Ray x d') depth' xi
+            rad <- radiance (Ray x d') depth'
             return (e + f * rad)
 
           REFR -> do
@@ -124,7 +123,7 @@ radiance ray@(Ray o d) depth xi = case intersects ray of
                 cos2t = 1-nnt*nnt*(1-ddn*ddn)
             if cos2t<0    -- Total internal reflection
               then do
-                rad <- radiance reflRay depth' xi
+                rad <- radiance reflRay depth'
                 return (e + f * rad)
               else do
                 let tdir = norm (d .* nnt - (n.*((if into then 1 else -1)*(ddn*nnt+sqrt cos2t))))
@@ -139,18 +138,18 @@ radiance ray@(Ray o d) depth xi = case intersects ray of
                     tp=tr/(1-pp)
                 rad <-
                   if depth>2
-                    then do er <- erand48 xi
+                    then do er <- erand48
                             if er<pp -- Russian roulette
-                              then (.* rp) <$> radiance reflRay depth' xi
-                              else (.* tp) <$> radiance (Ray x tdir) depth' xi
-                    else do rad0 <- (.* re) <$> radiance reflRay depth' xi
-                            rad1 <- (.* tr) <$> radiance (Ray x tdir) depth' xi
+                              then (.* rp) <$> radiance reflRay depth'
+                              else (.* tp) <$> radiance (Ray x tdir) depth'
+                    else do rad0 <- (.* re) <$> radiance reflRay depth'
+                            rad1 <- (.* tr) <$> radiance (Ray x tdir) depth'
                             return (rad0 + rad1)
                 return (e + f * rad)
 
     if depth'>5
       then do
-        er <- erand48 xi
+        er <- erand48
         if er < pr then continue (c .* recip pr) else return e
       else continue c
 
@@ -161,47 +160,53 @@ smallpt w h nsamps = do
       dir = norm $ Vec 0 (-0.042612) (-1)
       cx = Vec (fromIntegral w * 0.5135 / fromIntegral h) 0 0
       cy = norm (cx `cross` dir) .* 0.5135
-  c <- VM.replicate (w * h) 0
-  xi <- newIORef 0
-  flip mapM_ [0..h-1] $ \y -> do
-      writeXi xi y
-      for_ [0..w-1] \x -> do
-        let i = (h-y-1) * w + x
-        for_ [0..1] \sy -> do
-          for_ [0..1] \sx -> do
-            r <- newIORef 0
-            for_ [0..samps-1] \_s -> do
-              r1 <- (2*) <$> erand48 xi
+      img = (`concatMap` [(h-1),(h-2)..0]) $ \y -> runWithErand48 y do
+        for [0..w-1] \x -> do
+          (\pf -> foldlM pf 0 [(sy, sx) | sy <- [0,1], sx <- [0,1]]) \ci (sy, sx) -> do
+            Vec rr rg rb <- (\f -> foldlM f 0 [0..samps-1]) \ !r _s -> do
+              r1 <- (2*) <$> erand48
               let dx = if r1<1 then sqrt r1-1 else 1-sqrt(2-r1)
-              r2 <- (2*) <$> erand48 xi
+              r2 <- (2*) <$> erand48
               let dy = if r2<1 then sqrt r2-1 else 1-sqrt(2-r2)
                   d = (cx .* (((sx + 0.5 + dx)/2 + fromIntegral x)/fromIntegral w - 0.5)) +
                       (cy .* (((sy + 0.5 + dy)/2 + fromIntegral y)/fromIntegral h - 0.5)) + dir
-              rad <- radiance (Ray (org+d.*140) (norm d)) 0 xi
+              rad <- radiance (Ray (org+d.*140) (norm d)) 0
               -- Camera rays are pushed forward ^^^^^ to start in interior
-              modifyIORef r (+ rad .* recip (fromIntegral samps))
-            ci <- VM.unsafeRead c i
-            Vec rr rg rb <- readIORef r
-            VM.unsafeWrite c i $ ci + Vec (clamp rr) (clamp rg) (clamp rb) .* 0.25
+              pure (r + rad .* recip (fromIntegral samps))
+            pure (ci + Vec (clamp rr) (clamp rg) (clamp rb) .* 0.25)
 
   withFile "image.ppm" WriteMode $ \hdl -> do
         hPrintf hdl "P3\n%d %d\n%d\n" w h (255::Int)
-        flip mapM_ [0..w*h-1] \i -> do
-          Vec r g b <- VM.unsafeRead c i
+        for_ img \(Vec r g b) -> do
           hPrintf hdl "%d %d %d " (toInt r) (toInt g) (toInt b)
 
-writeXi :: IORef Word64 -> Int -> IO ()
-writeXi !xi !y = let yw = fromIntegral y; prod = yw * yw * yw in writeIORef xi (prod `unsafeShiftL` 32)
+data ET a = ET !Word64 !a deriving Functor
+newtype Erand48 a = Erand48 { runErand48' :: Word64 -> ET a } deriving Functor
 
-erand48 :: IORef Word64 -> IO Double
-erand48 !t =  do
-  r <- readIORef t
+instance Applicative Erand48 where
+  pure a = Erand48 \ w -> ET w a
+  {-# INLINE pure #-}
+  Erand48 mf <*> Erand48 mn = Erand48 \w ->
+    let ET w' f = mf w
+        ET w'' n = mn w'
+    in ET w'' (f n)
+  {-# INLINE (<*>) #-}
+
+instance Monad Erand48 where
+  m >>= k = Erand48 \ w ->
+    let ET w' a = runErand48' m w
+    in runErand48' (k a) w'
+  {-# INLINE (>>=) #-}
+
+runWithErand48 :: Int -> Erand48 a -> a                                                                                                
+runWithErand48 !y act = let yw = fromIntegral y; prod = yw * yw * yw; ET _ !r = runErand48' act (prod `unsafeShiftL` 32) in r
+
+erand48 :: Erand48 Double
+erand48 =  Erand48 \ !r ->
   let x' = 0x5deece66d * r + 0xb
       d_word = 0x3ff0000000000000 .|. ((x' .&. 0xffffffffffff) `unsafeShiftL` 4)
       d = castWord64ToDouble d_word - 1.0
-  writeIORef t x'
-  pure d
-      
+  in ET x' d
 
 main :: IO ()
 main = smallpt 200 200 256
