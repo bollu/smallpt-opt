@@ -1,5 +1,6 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE PatternSynonyms #-}
 module Main (main) where
 import Data.Foldable
 import Data.List (foldl')
@@ -40,10 +41,15 @@ maxv (Vec a b c) = maximum [a,b,c]
 
 data Ray = Ray !Vec !Vec -- origin, direction
 
-data Refl = DIFF | SPEC | REFR -- material types, used in radiance
+newtype Refl = Refl Int  -- material types, used in radiance
+pattern DIFF,SPEC,REFR :: Refl
+pattern DIFF = Refl 0
+pattern SPEC = Refl 1
+pattern REFR = Refl 2
+{-# COMPLETE DIFF, SPEC, REFR #-}
 
 -- radius, position, emission, color, reflection
-data Sphere = Sphere {-# UNPACK #-} !Double {-# UNPACK #-} !Vec {-# UNPACK #-} !Vec {-# UNPACK #-} !Vec !Refl
+data Sphere = Sphere {-# UNPACK #-} !Double {-# UNPACK #-} !Vec {-# UNPACK #-} !Vec {-# UNPACK #-} !Vec {-# UNPACK #-} !Refl
 
 intersect :: Ray -> Sphere -> Maybe Double
 intersect (Ray o d) (Sphere r p _e _c _refl) =
