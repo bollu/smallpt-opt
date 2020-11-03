@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -37,7 +38,7 @@ norm v = v .* recip (len v)
 dot :: Vec -> Vec -> Double
 dot (Vec a b c) (Vec x y z) = a*x+b*y+c*z
 maxv :: Vec -> Double
-maxv (Vec a b c) = maximum [a,b,c]
+maxv (Vec a b c) = max a (max b c)
 
 data Ray = Ray !Vec !Vec -- origin, direction
 
@@ -94,7 +95,7 @@ radiance ray@(Ray o d) depth xi = case intersects ray of
     let x = o + d .* t
         n = norm $ x - p
         nl = if dot n d < 0 then n else negate n
-        pr = maxv c
+        !pr = maxv c
         depth' = depth + 1
         continue f = case refl of
           DIFF -> do
