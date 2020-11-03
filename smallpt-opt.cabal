@@ -1,0 +1,26 @@
+Cabal-version:       2.4
+Name:                smallpt-opt
+Version:             0
+Synopsis:            A Haskell port of the smallpt path tracer.
+Description:         A Haskell port of the smallpt path tracer, with optimizations.
+License:             BSD-3-Clause
+License-file:        LICENSE
+Author:              Vo Minh Thu <noteed@gmail.com> with optimizations by davean & bollu
+Maintainer:          davean & bollu
+Stability:           Provisional
+Category:            Graphics
+Build-type:          Simple
+
+Source-repository head
+  type: git
+  location: https://github.com/bollu/smallpt-opt.git
+
+executable smallpt-opt
+  default-language: Haskell2010
+  main-is:          smallpt.hs
+
+  build-depends:
+      base >= 4.12 && < 4.15
+    , vector ^>= 0.12
+
+  ghc-options: -O2 -rtsopts

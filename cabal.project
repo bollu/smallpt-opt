@@ -1,0 +1,4 @@
+packages: .
+
+package smallpt-opt
+  ghc-options: -Wall
