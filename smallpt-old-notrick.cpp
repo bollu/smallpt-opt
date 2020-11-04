@@ -179,7 +179,7 @@ void smallpt(const int w, const int h, const int nsamps) {
             }
         }
     }
-    FILE *f = fopen("image-cpp.ppm", "w");  // Write image to PPM file.
+    FILE *f = fopen("image.ppm", "w");  // Write image to PPM file.
     fprintf(f, "P3\n%d %d\n%d\n", w, h, 255);
     for (int i = 0; i < w * h; i++) {
         fprintf(f, "%d %d %d ", toInt(c[i].x), toInt(c[i].y), toInt(c[i].z));

@@ -11,27 +11,27 @@ erand48:
 diff: runcpp-reference runcpp-notrick
 
 runcpp-reference:
-	-rm ./image-cpp.ppm
+	-rm ./image.ppm
 	-rm ./a.out
 	g++ smallpt-old.cpp -O2 -fsanitize=address -fsanitize=undefined -static-libasan \
 		 -o a.out
 	time ./a.out
-	sha1sum image-cpp.ppm > image-cpp.sha
+	sha1sum image.ppm > image.sha
 
-runcpp-notrick:
-	-rm ./image-cpp.ppm
+runcpp-notrick: runcpp-reference
+	-rm ./image.ppm
 	-rm ./b.out
 	g++ smallpt-old-notrick.cpp -fsanitize=address -fsanitize=undefined -O2 \
 		-static-libasan -o b.out
 	time ./b.out
-	sha1sum -c image-cpp.sha # check the sha1sum of image-cpp.sha
+	sha1sum -c image.sha # check the sha1sum of image-cpp.sha
 
 
-runhs:
+runhs: runcpp-reference
 	-rm image.ppm
 	-rm ./smallpt-hs
 	# https://llvm.org/docs/CommandGuide/llc.html
-	ghc smallpt.hs -O2 -o smallpt-hs -package vector -package unboxed-ref -ddump-cmm -ddump-to-file
-
-	/usr/bin/time ./smallpt-hs
+	ghc smallpt.hs -O2 -o smallpt-hs.out -package vector -package unboxed-ref -ddump-cmm -ddump-to-file
+	./smallpt-hs.out
+	sha1sum -c image.sha # check the sha1sum of image-cpp.sha
 

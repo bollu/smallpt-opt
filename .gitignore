@@ -6,3 +6,6 @@ smallpt
 *.ppm
 *.sha
 *.out
+dump-dir
+*.hi
+*.o
