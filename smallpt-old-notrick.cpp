@@ -8,9 +8,10 @@ struct Vec {        // Usage: time ./smallpt 5000 && xv image.ppm
   Vec operator-(const Vec &b) const { return Vec(x-b.x,y-b.y,z-b.z); }
   Vec operator*(double b) const { return Vec(x*b,y*b,z*b); }
   Vec mult(const Vec &b) const { return Vec(x*b.x,y*b.y,z*b.z); }
-  Vec& norm(){ return *this = *this * (1/sqrt(x*x+y*y+z*z)); }
+  // Vec& norm(){ return *this = *this * (1/sqrt(x*x+y*y+z*z)); }
+  Vec norm() const { return *this * (1/sqrt(x*x+y*y+z*z)); }
   double dot(const Vec &b) const { return x*b.x+y*b.y+z*b.z; } // cross:
-  Vec operator%(Vec&b){return Vec(y*b.z-z*b.y,z*b.x-x*b.z,x*b.y-y*b.x);}
+  Vec operator%(const Vec&b) const {return Vec(y*b.z-z*b.y,z*b.x-x*b.z,x*b.y-y*b.x);}
 };
 struct Ray { Vec o, d; Ray(Vec o_, Vec d_) : o(o_), d(d_) {} };
 enum Refl_t { DIFF, SPEC, REFR };  // material types, used in radiance()
@@ -51,26 +52,27 @@ Vec radiance(const Ray &r, int depth, unsigned short *Xi){
   if (!intersect(r, t, id)) return Vec(); // if miss, return black
   const Sphere &obj = spheres[id];        // the hit object
   Vec x=r.o+r.d*t, n=(x-obj.p).norm(), nl=n.dot(r.d)<0?n:n*-1, f=obj.c;
-  double p = f.x>f.y && f.x>f.z ? f.x : f.y>f.z ? f.y : f.z; // max refl
-  if (++depth>5) if (erand48(Xi)<p) f=f*(1/p); else return obj.e; //R.R.
+  const double p = f.x>f.y && f.x>f.z ? f.x : f.y>f.z ? f.y : f.z; // max refl
+  const double depthnew = depth+1;
+  if (depthnew>5) if (erand48(Xi)<p) f=f*(1/p); else return obj.e; //R.R.
   if (obj.refl == DIFF){                  // Ideal DIFFUSE reflection
     double r1=2*M_PI*erand48(Xi), r2=erand48(Xi), r2s=sqrt(r2);
     Vec w=nl, u=((fabs(w.x)>.1?Vec(0,1):Vec(1))%w).norm(), v=w%u;
     Vec d = (u*cos(r1)*r2s + v*sin(r1)*r2s + w*sqrt(1-r2)).norm();
-    return obj.e + f.mult(radiance(Ray(x,d),depth,Xi));
+    return obj.e + f.mult(radiance(Ray(x,d),depthnew,Xi));
   } else if (obj.refl == SPEC)            // Ideal SPECULAR reflection
-    return obj.e + f.mult(radiance(Ray(x,r.d-n*2*n.dot(r.d)),depth,Xi));
+    return obj.e + f.mult(radiance(Ray(x,r.d-n*2*n.dot(r.d)),depthnew,Xi));
   Ray reflRay(x, r.d-n*2*n.dot(r.d));     // Ideal dielectric REFRACTION
   bool into = n.dot(nl)>0;                // Ray from outside going in?
   double nc=1, nt=1.5, nnt=into?nc/nt:nt/nc, ddn=r.d.dot(nl), cos2t;
   if ((cos2t=1-nnt*nnt*(1-ddn*ddn))<0)    // Total internal reflection
-    return obj.e + f.mult(radiance(reflRay,depth,Xi));
+    return obj.e + f.mult(radiance(reflRay,depthnew,Xi));
   Vec tdir = (r.d*nnt - n*((into?1:-1)*(ddn*nnt+sqrt(cos2t)))).norm();
   double a=nt-nc, b=nt+nc, R0=a*a/(b*b), c = 1-(into?-ddn:tdir.dot(n));
   double Re=R0+(1-R0)*c*c*c*c*c,Tr=1-Re,P=.25+.5*Re,RP=Re/P,TP=Tr/(1-P);
-  return obj.e + f.mult(depth>2 ? (erand48(Xi)<P ?   // Russian roulette
-    radiance(reflRay,depth,Xi)*RP:radiance(Ray(x,tdir),depth,Xi)*TP) :
-    radiance(reflRay,depth,Xi)*Re+radiance(Ray(x,tdir),depth,Xi)*Tr);
+  return obj.e + f.mult(depthnew>2 ? (erand48(Xi)<P ?   // Russian roulette
+    radiance(reflRay,depthnew,Xi)*RP:radiance(Ray(x,tdir),depthnew,Xi)*TP) :
+    radiance(reflRay,depthnew,Xi)*Re+radiance(Ray(x,tdir),depthnew,Xi)*Tr);
 }
 
 extern "C"
@@ -93,7 +95,8 @@ smallpt (int w, int h, int nsamps)
             double r2=2*erand48(Xi), dy=r2<1 ? sqrt(r2)-1: 1-sqrt(2-r2);
             Vec d = cx*( ( (sx+.5 + dx)/2 + x)/w - .5) +
                     cy*( ( (sy+.5 + dy)/2 + y)/h - .5) + cam.d;
-            r = r + radiance(Ray(cam.o+d*140,d.norm()),0,Xi)*(1./samps);
+            Vec dnorm = d.norm();
+            r = r + radiance(Ray(cam.o+dnorm*140,dnorm),0,Xi)*(1./samps);
           } // Camera rays are pushed ^^^^^ forward to start in interior
           c[i] = c[i] + Vec(clamp(r.x),clamp(r.y),clamp(r.z))*.25;
         }

@@ -3,3 +3,6 @@ dist-newstyle
 cabal.project.local
 image.ppm
 smallpt
+*.ppm
+*.sha
+*.out

@@ -188,4 +188,4 @@ erand48 !t =  do
   pure d
 
 main :: IO ()
-main = smallpt 200 200 256
+main = smallpt 50 50 256
