@@ -1,6 +1,9 @@
 #include <math.h>    // smallpt, a Path Tracer by Kevin Beason, 2008
 #include <stdio.h>   //        Remove "-fopenmp" for g++ version < 4.2
 #include <stdlib.h>  // Make : g++ -O3 -fopenmp smallpt.cpp -o smallpt
+ 
+extern "C" { const char *__asan_default_options() { return "detect_leaks=0"; } };
+
 struct Vec {         // Usage: time ./smallpt 5000 && xv image.ppm
     double x, y, z;  // position, also color (r,g,b)
     Vec(double x_, double y_, double z_) {
@@ -185,6 +188,7 @@ void smallpt(const int w, const int h, const int nsamps) {
 }
 
 int main() {
+    // unsigned short Xi[3] = {0, 0, (unsigned short)(200*200*200)};
     smallpt(50, 50, 256);
     return 0;
 }
