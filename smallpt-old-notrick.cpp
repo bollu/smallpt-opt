@@ -3,11 +3,14 @@
 #include <stdlib.h>  // Make : g++ -O3 -fopenmp smallpt.cpp -o smallpt
 struct Vec {         // Usage: time ./smallpt 5000 && xv image.ppm
     double x, y, z;  // position, also color (r,g,b)
-    Vec(double x_ = 0, double y_ = 0, double z_ = 0) {
+    Vec(double x_, double y_, double z_) {
         x = x_;
         y = y_;
         z = z_;
     }
+    Vec() { x = y = z = 0; }
+
+    static Vec zero() { return Vec(0, 0, 0); }
     Vec operator+(const Vec &b) const { return Vec(x + b.x, y + b.y, z + b.z); }
     Vec operator-(const Vec &b) const { return Vec(x - b.x, y - b.y, z - b.z); }
     Vec operator*(double b) const { return Vec(x * b, y * b, z * b); }
@@ -46,18 +49,23 @@ struct Sphere {
 };
 Sphere spheres[] = {
     // Scene: radius, position, emission, color, material
-    Sphere(1e5, Vec(1e5 + 1, 40.8, 81.6), Vec(), Vec(.75, .25, .25),
+    Sphere(1e5, Vec(1e5 + 1, 40.8, 81.6), Vec::zero(), Vec(.75, .25, .25),
            DIFF),  // Left
-    Sphere(1e5, Vec(-1e5 + 99, 40.8, 81.6), Vec(), Vec(.25, .25, .75),
-           DIFF),                                                      // Rght
-    Sphere(1e5, Vec(50, 40.8, 1e5), Vec(), Vec(.75, .75, .75), DIFF),  // Back
-    Sphere(1e5, Vec(50, 40.8, -1e5 + 170), Vec(), Vec(), DIFF),        // Frnt
-    Sphere(1e5, Vec(50, 1e5, 81.6), Vec(), Vec(.75, .75, .75), DIFF),  // Botm
-    Sphere(1e5, Vec(50, -1e5 + 81.6, 81.6), Vec(), Vec(.75, .75, .75),
-           DIFF),                                                       // Top
-    Sphere(16.5, Vec(27, 16.5, 47), Vec(), Vec(1, 1, 1) * .999, SPEC),  // Mirr
-    Sphere(16.5, Vec(73, 16.5, 78), Vec(), Vec(1, 1, 1) * .999, REFR),  // Glas
-    Sphere(600, Vec(50, 681.6 - .27, 81.6), Vec(12, 12, 12), Vec(),
+    Sphere(1e5, Vec(-1e5 + 99, 40.8, 81.6), Vec::zero(), Vec(.25, .25, .75),
+           DIFF),  // Rght
+    Sphere(1e5, Vec(50, 40.8, 1e5), Vec::zero(), Vec(.75, .75, .75),
+           DIFF),  // Back
+    Sphere(1e5, Vec(50, 40.8, -1e5 + 170), Vec::zero(), Vec::zero(),
+           DIFF),  // Frnt
+    Sphere(1e5, Vec(50, 1e5, 81.6), Vec::zero(), Vec(.75, .75, .75),
+           DIFF),  // Botm
+    Sphere(1e5, Vec(50, -1e5 + 81.6, 81.6), Vec::zero(), Vec(.75, .75, .75),
+           DIFF),  // Top
+    Sphere(16.5, Vec(27, 16.5, 47), Vec::zero(), Vec(1, 1, 1) * .999,
+           SPEC),  // Mirr
+    Sphere(16.5, Vec(73, 16.5, 78), Vec::zero(), Vec(1, 1, 1) * .999,
+           REFR),  // Glas
+    Sphere(600, Vec(50, 681.6 - .27, 81.6), Vec(12, 12, 12), Vec::zero(),
            DIFF)  // Lite
 };
 inline double clamp(double x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
@@ -78,7 +86,7 @@ Vec radiance(const Ray &r, int depth, unsigned short *Xi) {
     double t;    // distance to intersection
     int id = 0;  // id of intersected object
     if (!intersect(r, t, id)) {
-        return Vec();
+        return Vec::zero();
     }                                 // if miss, return black
     const Sphere &obj = spheres[id];  // the hit object
     const Vec x = r.o + r.d * t, n = (x - obj.p).norm(),
@@ -98,7 +106,8 @@ Vec radiance(const Ray &r, int depth, unsigned short *Xi) {
         const double r1 = 2 * M_PI * erand48(Xi), r2 = erand48(Xi),
                      r2s = sqrt(r2);
         const Vec w = nl,
-                  u = ((fabs(w.x) > .1 ? Vec(0, 1) : Vec(1)) % w).norm(),
+                  u = ((fabs(w.x) > .1 ? Vec(0, 1, 0) : Vec(1, 0, 0)) % w)
+                          .norm(),
                   v = w % u;
         const Vec d =
             (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm();
@@ -136,8 +145,8 @@ void smallpt(const int w, const int h, const int nsamps) {
     const int samps = nsamps / 4;  // # samples
     const Ray cam(Vec(50, 52, 295.6),
                   Vec(0, -0.042612, -1).norm());  // cam pos, dir
-    const Vec cx = Vec(w * .5135 / h), cy = (cx % cam.d).norm() * .5135;
-    Vec r = Vec();
+    const Vec cx = Vec(w * .5135 / h, 0, 0), cy = (cx % cam.d).norm() * .5135;
+    Vec r = Vec::zero();
     Vec *c = new Vec[w * h];
     // #pragma omp parallel for schedule(dynamic, 1) private(r)       // OpenMP
     for (int y = 0; y < h; y++) {  // Loop over image rows
@@ -145,8 +154,9 @@ void smallpt(const int w, const int h, const int nsamps) {
         unsigned short Xi[3] = {0, 0, (unsigned short)(y * y * y)};
         for (unsigned short x = 0; x < w; x++) {  // Loop cols
             const int i = (h - y - 1) * w + x;
-            for (int sy = 0; sy < 2; sy++) {                 // 2x2subpx
-                for (int sx = 0; sx < 2; sx++, r = Vec()) {  // 2x2-subpx-col
+            for (int sy = 0; sy < 2; sy++) {  // 2x2subpx
+                for (int sx = 0; sx < 2;
+                     sx++, r = Vec::zero()) {  // 2x2-subpx-col
                     for (int s = 0; s < samps; s++) {
                         double r1 = 2 * erand48(Xi),
                                dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
