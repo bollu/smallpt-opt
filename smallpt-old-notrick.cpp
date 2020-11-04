@@ -142,11 +142,11 @@ void smallpt(const int w, const int h, const int nsamps) {
     // #pragma omp parallel for schedule(dynamic, 1) private(r)       // OpenMP
     for (int y = 0; y < h; y++) {  // Loop over image rows
         // fprintf(stderr,"\rRendering (%d spp) %5.2f%%",samps*4,100.*y/(h-1));
-        for (unsigned short x = 0, Xi[3] = {0, 0, (unsigned short)(y * y * y)};
-             x < w; x++)  // Loop cols
-            for (int sy = 0, i = (h - y - 1) * w + x; sy < 2; sy++)  // 2x2subpx
-                for (int sx = 0; sx < 2;
-                     sx++, r = Vec()) {  // 2x2 subpixel cols
+        unsigned short Xi[3] = {0, 0, (unsigned short)(y * y * y)};
+        for (unsigned short x = 0; x < w; x++) {  // Loop cols
+            const int i = (h - y - 1) * w + x;
+            for (int sy = 0; sy < 2; sy++) {                 // 2x2subpx
+                for (int sx = 0; sx < 2; sx++, r = Vec()) {  // 2x2-subpx-col
                     for (int s = 0; s < samps; s++) {
                         double r1 = 2 * erand48(Xi),
                                dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
@@ -163,11 +163,14 @@ void smallpt(const int w, const int h, const int nsamps) {
                        // interior
                     c[i] = c[i] + Vec(clamp(r.x), clamp(r.y), clamp(r.z)) * .25;
                 }
+            }
+        }
     }
     FILE *f = fopen("image-cpp.ppm", "w");  // Write image to PPM file.
     fprintf(f, "P3\n%d %d\n%d\n", w, h, 255);
-    for (int i = 0; i < w * h; i++)
+    for (int i = 0; i < w * h; i++) {
         fprintf(f, "%d %d %d ", toInt(c[i].x), toInt(c[i].y), toInt(c[i].z));
+    }
 }
 }
 
