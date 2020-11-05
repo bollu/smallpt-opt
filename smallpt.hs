@@ -136,7 +136,7 @@ radiance ray@(Ray o d) depth = case intersects ray of
                     !rp=re/pp
                     !tp=tr/(1-pp)
                 rad <-
-                  if depth>2
+                  if depth'>2
                     then do er <- erand48
                             if er<pp -- Russian roulette
                               then (.* rp) <$> radiance reflRay depth'
@@ -156,10 +156,10 @@ radiance ray@(Ray o d) depth = case intersects ray of
 smallpt :: Int -> Int -> Int -> IO ()
 smallpt w h nsamps = do
   let samps = nsamps `div` 4
-      org = Vec 50 52 295.6
-      dir = norm $ Vec 0 (-0.042612) (-1)
+      camo = Vec 50 52 295.6
+      camd = norm $ Vec 0 (-0.042612) (-1)
       cx = Vec (fromIntegral w * 0.5135 / fromIntegral h) 0 0
-      cy = norm (cx `cross` dir) .* 0.5135
+      cy = norm (cx `cross` camd) .* 0.5135
       img = (`concatMap` [(h-1),(h-2)..0]) $ \y -> runWithErand48 y do
         for [0..w-1] \x -> do
           (\pf -> foldlM pf 0 [(sy, sx) | sy <- [0,1], sx <- [0,1]]) \ci (sy, sx) -> do
@@ -169,8 +169,9 @@ smallpt w h nsamps = do
               r2 <- (2*) <$> erand48
               let !dy = if r2<1 then sqrt r2-1 else 1-sqrt(2-r2)
                   !d = (cx .* (((sx + 0.5 + dx)/2 + fromIntegral x)/fromIntegral w - 0.5)) +
-                       (cy .* (((sy + 0.5 + dy)/2 + fromIntegral y)/fromIntegral h - 0.5)) + dir
-              rad <- radiance (Ray (org+d.*140) (norm d)) 0
+                       (cy .* (((sy + 0.5 + dy)/2 + fromIntegral y)/fromIntegral h - 0.5)) + camd
+              let dnorm = norm d
+              rad <- radiance (Ray (camo+dnorm.*140) dnorm) 0
               -- Camera rays are pushed forward ^^^^^ to start in interior
               pure (r + rad .* recip (fromIntegral samps))
             pure (ci + Vec (clamp rr) (clamp rg) (clamp rb) .* 0.25)
@@ -211,4 +212,4 @@ erand48 =  Erand48 \ !r ->
   in ET x' d
 
 main :: IO ()
-main = smallpt 50 50 256
+main = smallpt 20 20 256

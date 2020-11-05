@@ -189,6 +189,6 @@ void smallpt(const int w, const int h, const int nsamps) {
 
 int main() {
     // unsigned short Xi[3] = {0, 0, (unsigned short)(200*200*200)};
-    smallpt(50, 50, 256);
+    smallpt(20, 20, 256);
     return 0;
 }

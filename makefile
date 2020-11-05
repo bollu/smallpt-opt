@@ -1,5 +1,9 @@
 .PHONY: run runhs runcpp runhs-llvm runcpp-reference runcpp-notrick erand48
 
+
+
+diff: runcpp-notrick runhs
+
 erand48:
 	g++ erand48.cpp -o erand48.out
 	./erand48.out
@@ -7,8 +11,6 @@ erand48:
 	ghc erand48.hs -package unboxed-ref -o erand48.out
 	./erand48.out > erand48.txt
 	sha1sum -c erand48.sha
-
-diff: runcpp-reference runcpp-notrick
 
 runcpp-reference:
 	-rm ./image.ppm

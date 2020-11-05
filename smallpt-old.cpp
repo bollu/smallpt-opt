@@ -112,6 +112,6 @@ smallpt (int w, int h, int nsamps)
 }
 
 int main () {
-  smallpt(50, 50, 256);
+  smallpt(20, 20, 256);
   return 0;
 }
