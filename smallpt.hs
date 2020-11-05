@@ -136,7 +136,7 @@ radiance ray@(Ray o d) depth = case intersects ray of
                     !rp=re/pp
                     !tp=tr/(1-pp)
                 rad <-
-                  if depth>2
+                  if depth'>2
                     then do er <- erand48
                             if er<pp -- Russian roulette
                               then (.* rp) <$> radiance reflRay depth'
